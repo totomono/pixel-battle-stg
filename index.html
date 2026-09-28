@@ -40,10 +40,17 @@ function moveTouch(e){
  const r=c.getBoundingClientRect(),t=e.touches?e.touches[0]:e;
  touch.x=(t.clientX-r.left)*W/r.width; touch.y=(t.clientY-r.top)*H/r.height;
 }
-c.addEventListener('touchstart',e=>{e.preventDefault();touch.on=true;moveTouch(e)},{passive:false});
+c.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  if(!started||gameOver){reset();return;}
+  touch.on=true;moveTouch(e);
+},{passive:false});
 c.addEventListener('touchmove',e=>{e.preventDefault();if(touch.on)moveTouch(e)},{passive:false});
 c.addEventListener('touchend',()=>touch.on=false);
-c.addEventListener('pointerdown',e=>{touch.on=true;touch.x=e.offsetX;touch.y=e.offsetY});
+c.addEventListener('pointerdown',e=>{
+  if(!started||gameOver){reset();return;}
+  touch.on=true;touch.x=e.offsetX;touch.y=e.offsetY;
+});
 c.addEventListener('pointermove',e=>{if(touch.on){touch.x=e.offsetX;touch.y=e.offsetY}});
 c.addEventListener('pointerup',()=>touch.on=false);
 c.addEventListener('click',()=>{if(!started||gameOver)reset()});

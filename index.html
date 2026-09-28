@@ -7,14 +7,17 @@
 <style>
 html,body{margin:0;background:#06080d;color:#fff;overflow:hidden;font-family:system-ui,sans-serif}
 #wrap{height:100vh;display:flex;align-items:center;justify-content:center}
+#gamebox{width:min(100vw,56.25vh);display:flex;flex-direction:column;align-items:center}
 canvas{width:min(100vw,56.25vh);height:min(177.78vw,100vh);max-width:100vw;max-height:100vh;background:#05070c;image-rendering:pixelated;touch-action:none}
+#controls{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
+#controls button{height:52px;border:1px solid #5a7b9c;border-radius:8px;background:#101b2a;color:#fff;font:bold 13px monospace;touch-action:none}
 </style>
 </head>
-<body><div id="wrap"><canvas id="g" width="360" height="640"></canvas></div>
+<body><div id="wrap"><div id="gamebox"><canvas id="g" width="360" height="640"></canvas><div id="controls"><button data-key="shot">SHOT</button><button data-key="laser">LASER</button><button data-key="bomb">BOMB</button><button data-key="od">OVERDRIVE</button></div></div></div>
 <script>
 const c=document.getElementById('g'),x=c.getContext('2d'),W=360,H=640;
 x.imageSmoothingEnabled=false;
-let keys={},touch={x:180,y:550,on:false},sel=0,started=false,gameOver=false,frame=0,stage=1;
+let keys={},touch={x:180,y:550,on:false},sel=0,started=false,gameOver=false,frame=0,stage=1;let mobileShot=true;
 const ships=[
  ['VALKYRIE','BALANCED',1,1,1],['FALCON','LASER',.9,1.3,1],
  ['BULLET','POWER',1.2,.8,.9],['PHANTOM','GRAZE',.9,1,1.35],['NOVA','SPREAD',1.05,.95,1.1]
@@ -54,6 +57,14 @@ c.addEventListener('pointerdown',e=>{
 c.addEventListener('pointermove',e=>{if(touch.on){touch.x=e.offsetX;touch.y=e.offsetY}});
 c.addEventListener('pointerup',()=>touch.on=false);
 c.addEventListener('click',()=>{if(!started||gameOver)reset()});
+document.querySelectorAll('#controls button').forEach(b=>b.addEventListener('pointerdown',e=>{
+ e.preventDefault(); if(!started||gameOver){reset();return}
+ const k=b.dataset.key;
+ if(k==='shot')mobileShot=true;
+ if(k==='laser')mobileShot=false;
+ if(k==='bomb')bomb();
+ if(k==='od')activateOD();
+}));
 
 function burst(X,Y,col='#fff',n=8){
  for(let i=0;i<n;i++)fx.push({x:X,y:Y,vx:(Math.random()-.5)*3,vy:(Math.random()-.5)*3,t:22,c:col});
@@ -219,9 +230,11 @@ function update(){
  if(frame===1500)clearStage();
 }
 function ship(X,Y){
- x.fillStyle='#8ff';x.fillRect(X-2,Y-13,4,4);x.fillRect(X-5,Y-8,10,8);
- x.fillStyle='#fff';x.fillRect(X-2,Y-5,4,8);
- x.fillStyle='#38f';x.fillRect(X-9,Y-2,5,4);x.fillRect(X+4,Y-2,5,4);
+ x.fillStyle='#17395f';x.fillRect(X-11,Y-3,22,7);
+ x.fillStyle='#38d9ff';x.fillRect(X-3,Y-16,6,21);x.fillRect(X-8,Y-9,16,8);
+ x.fillStyle='#fff';x.fillRect(X-2,Y-10,4,8);
+ x.fillStyle='#72f5ff';x.fillRect(X-13,Y-1,8,4);x.fillRect(X+5,Y-1,8,4);
+ x.fillStyle='#fff';x.fillRect(X-1,Y-19,2,4);
 }
 function draw(){
  x.fillStyle='#05070c';x.fillRect(0,0,W,H);

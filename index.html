@@ -19,6 +19,7 @@ button{height:52px;background:#102033;color:#fff;border:2px solid #46708c;border
 const c=document.getElementById("game"),g=c.getContext("2d"),W=360,H=640;
 g.imageSmoothingEnabled=false;
 let started=false,over=false,drag=false,tx=180,ty=550,frame=0,score=0,lives=3,bombs=3,weapon="shot";
+let lastTouchX=0,lastTouchY=0;
 const p={x:180,y:550,inv:0,od:0},shots=[],en=[],eb=[];
 function start(){started=true;over=false;frame=0;score=0;lives=3;bombs=3;weapon="shot";
 p.x=180;p.y=550;p.inv=45;p.od=0;tx=180;ty=550;shots.length=0;en.length=0;eb.length=0}
@@ -30,7 +31,13 @@ g.fillStyle="#1768b5";g.fillRect(X-3,Y-12,6,6);
 g.fillStyle="#63adff";g.fillRect(X-16,Y-2,7,4);g.fillRect(X+9,Y-2,7,4);
 g.fillStyle="#fff36b";g.fillRect(X-7,Y+5,5,9);g.fillRect(X+2,Y+5,5,9);
 g.strokeStyle="#fff";g.lineWidth=2;g.strokeRect(X-19,Y-24,38,39)}
-function move(e){const r=c.getBoundingClientRect();tx=(e.clientX-r.left)*W/r.width;ty=(e.clientY-r.top)*H/r.height}
+function move(e){
+const r=c.getBoundingClientRect();
+const nx=(e.clientX-r.left)*W/r.width;
+const ny=(e.clientY-r.top)*H/r.height;
+if(drag){tx+=nx-lastTouchX;ty+=ny-lastTouchY}
+lastTouchX=nx;lastTouchY=ny;
+}
 function shoot(){if(weapon==="shot"){shots.push({x:p.x-6,y:p.y-22,vy:-8});shots.push({x:p.x+6,y:p.y-22,vy:-8})}
 else shots.push({x:p.x,y:p.y-25,vy:-10,laser:true})}
 function spawn(){en.push({x:20+Math.random()*320,y:-15,hp:1+Math.floor(Math.random()*3),vy:1})}
@@ -59,7 +66,14 @@ else if(p.inv===0||p.inv%6<3)player();
 if(over){g.fillStyle="rgba(0,0,0,.75)";g.fillRect(0,0,W,H);g.fillStyle="#fff";g.textAlign="center";
 g.font="bold 28px monospace";g.fillText("GAME OVER",180,290);g.font="14px monospace";g.fillText("TAP TO RETRY",180,320)}
 requestAnimationFrame(draw)}
-c.addEventListener("pointerdown",e=>{e.preventDefault();if(!started||over){start();return}drag=true;move(e)});
+c.addEventListener("pointerdown",e=>{
+e.preventDefault();
+if(!started||over){start();return}
+const r=c.getBoundingClientRect();
+lastTouchX=(e.clientX-r.left)*W/r.width;
+lastTouchY=(e.clientY-r.top)*H/r.height;
+drag=true;
+});
 c.addEventListener("pointermove",e=>{if(drag)move(e)});c.addEventListener("pointerup",()=>drag=false);c.addEventListener("pointercancel",()=>drag=false);
 document.getElementById("shot").onpointerdown=e=>{e.preventDefault();if(!started||over)start();else weapon="shot"};
 document.getElementById("laser").onpointerdown=e=>{e.preventDefault();if(!started||over)start();else weapon="laser"};

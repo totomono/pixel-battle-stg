@@ -1,294 +1,69 @@
-<!doctype html>
-<html lang="ja">
-<head>
+<!doctype html><html lang="ja"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>PIXEL BATTLE STG v6</title>
+<title>PIXEL BATTLE STG v10</title>
 <style>
-html,body{margin:0;background:#06080d;color:#fff;overflow:hidden;font-family:system-ui,sans-serif}
-#wrap{height:100vh;display:flex;align-items:center;justify-content:center}
-#gamebox{width:min(100vw,56.25vh);display:flex;flex-direction:column;align-items:center}
-canvas{width:min(100vw,56.25vh);height:min(177.78vw,100vh);max-width:100vw;max-height:100vh;background:#05070c;image-rendering:pixelated;touch-action:none}
-#controls{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
-#controls button{height:52px;border:1px solid #5a7b9c;border-radius:8px;background:#101b2a;color:#fff;font:bold 13px monospace;touch-action:none}
-</style>
-</head>
-<body><div id="wrap"><div id="gamebox"><canvas id="g" width="360" height="640"></canvas><div id="controls"><button data-key="shot">SHOT</button><button data-key="laser">LASER</button><button data-key="bomb">BOMB</button><button data-key="od">OVERDRIVE</button></div></div></div>
+html,body{margin:0;width:100%;height:100%;background:#05070c;color:#fff;overflow:hidden;font-family:system-ui}
+#wrap{height:100%;display:flex;align-items:center;justify-content:center}
+#box{width:min(100vw,56.25vh)}
+canvas{display:block;width:100%;aspect-ratio:360/640;background:#07101b;image-rendering:pixelated;touch-action:none}
+#controls{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px}
+button{height:52px;background:#102033;color:#fff;border:2px solid #46708c;border-radius:8px;font:bold 14px monospace;touch-action:none}
+</style></head><body><div id="wrap"><div id="box">
+<canvas id="game" width="360" height="640"></canvas>
+<div id="controls"><button id="shot">SHOT</button><button id="laser">LASER</button>
+<button id="bomb">BOMB</button><button id="od">OVERDRIVE</button></div>
+</div></div>
 <script>
-const c=document.getElementById('g'),x=c.getContext('2d'),W=360,H=640;
-x.imageSmoothingEnabled=false;
-let keys={},touch={x:180,y:550,on:false},sel=0,started=false,gameOver=false,frame=0,stage=1;let mobileShot=true;
-const ships=[
- ['VALKYRIE','BALANCED',1,1,1],['FALCON','LASER',.9,1.3,1],
- ['BULLET','POWER',1.2,.8,.9],['PHANTOM','GRAZE',.9,1,1.35],['NOVA','SPREAD',1.05,.95,1.1]
-];
-let p,en=[],pb=[],eb=[],lasers=[],el=[],fx=[],stageEnd=0;
-let enemyBulletHP=1; // persistent difficulty carried across the stage
-let odUseCount=0;
-
-function reset(){
- p={x:180,y:550,r:4,l:3,bomb:3,shot:1,od:0,odStock:0,g:0,combo:0,ct:0,score:0,inv:0,odFlash:0,odCount:0};
- en=[];pb=[];eb=[];lasers=[];el=[];fx=[];frame=0;stage=1;stageEnd=0;
- enemyBulletHP=1;odUseCount=0;gameOver=false;started=true;
-}
-addEventListener('keydown',e=>{
- keys[e.key.toLowerCase()]=1;
- if(!started&&/^[1-5]$/.test(e.key))sel=+e.key-1;
- if(!started&&(e.key==='enter'||e.key===' '))reset();
- if(gameOver&&(e.key==='enter'||e.key===' '))reset();
-});
-addEventListener('keyup',e=>keys[e.key.toLowerCase()]=0);
-
-function moveTouch(e){
- const r=c.getBoundingClientRect(),t=e.touches?e.touches[0]:e;
- touch.x=(t.clientX-r.left)*W/r.width; touch.y=(t.clientY-r.top)*H/r.height;
-}
-c.addEventListener('touchstart',e=>{
-  e.preventDefault();
-  if(!started||gameOver){reset();return;}
-  touch.on=true;moveTouch(e);
-},{passive:false});
-c.addEventListener('touchmove',e=>{e.preventDefault();if(touch.on)moveTouch(e)},{passive:false});
-c.addEventListener('touchend',()=>touch.on=false);
-c.addEventListener('pointerdown',e=>{
-  if(!started||gameOver){reset();return;}
-  touch.on=true;touch.x=e.offsetX;touch.y=e.offsetY;
-});
-c.addEventListener('pointermove',e=>{if(touch.on){touch.x=e.offsetX;touch.y=e.offsetY}});
-c.addEventListener('pointerup',()=>touch.on=false);
-c.addEventListener('click',()=>{if(!started||gameOver)reset()});
-document.querySelectorAll('#controls button').forEach(b=>b.addEventListener('pointerdown',e=>{
- e.preventDefault(); if(!started||gameOver){reset();return}
- const k=b.dataset.key;
- if(k==='shot')mobileShot=true;
- if(k==='laser')mobileShot=false;
- if(k==='bomb')bomb();
- if(k==='od')activateOD();
-}));
-
-function burst(X,Y,col='#fff',n=8){
- for(let i=0;i<n;i++)fx.push({x:X,y:Y,vx:(Math.random()-.5)*3,vy:(Math.random()-.5)*3,t:22,c:col});
-}
-function combo(v){
- p.combo+=v;p.ct=150;
- p.g=Math.min(1,p.g+.025*v);
- if(p.g>=1){p.odStock=Math.min(3,p.odStock+1);p.g=0}
-}
-function spawn(k,X,Y){
- const hp=k===1?1:k===2?8:45;
- en.push({x:X,y:Y,k,hp,t:0,vy:k===3?.45:1});
-}
-function wave(){
- const r=Math.random();
- if(r<.38){
-   for(let i=0;i<5;i++)spawn(1,35+i*65,-15-i*12);
- }else if(r<.72){
-   spawn(2,65,-20);spawn(1,130,-35);spawn(1,190,-55);spawn(2,285,-25);
- }else{
-   spawn(3,180,-45);spawn(1,65,-65);spawn(2,285,-35);spawn(1,110,-85);
- }
-}
-function fire(e){
- const n=e.k===3?7:e.k===2?3:1;
- const speed=(e.k===1?2:e.k===2?1.7:1.25)*(p.od?1.2:1);
- for(let i=0;i<n;i++){
-   const a=Math.PI/2+(i-(n-1)/2)*.18;
-   eb.push({x:e.x,y:e.y,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed,
-            r:2.2,hp:enemyBulletHP,dead:false,g:false,breakable:e.k===2&&Math.random()<.25});
- }
- if(e.k===3&&e.t%90===0)el.push({x:e.x,t:0,dead:false});
-}
-function shoot(){
- if(p.shot){
-   for(const q of [-5,5])pb.push({x:p.x+q,y:p.y-14,vx:0,vy:-7,
-     dam:1.4*ships[sel][2],dead:false});
- }else{
-   lasers.push({x:p.x,w:p.od?7:4,dam:(p.od?6.5:4)*ships[sel][3],t:0});
- }
-}
-function bomb(){
- if(p.bomb<=0||p.inv>0)return;
- p.bomb--;p.inv=45;eb=[];
- for(const e of en)e.hp-=e.k===3?18:8;
- burst(p.x,p.y,'#fff',20);
-}
-function activateOD(){
- if(p.od||p.odStock<=0)return;
- const stocks=p.odStock;
- p.od=stocks*600; // 10/20/30 sec
- p.odStock=0;
- p.inv=14;          // activation flash is invincible
- p.odFlash=12;
- odUseCount++;
- // Every activation permanently raises the durability of future enemy bullets.
- enemyBulletHP+=1;
- burst(p.x,p.y,'#9ff',24);
-}
-function hit(){
- if(p.inv>0||p.od>0)return;
- p.l--;p.inv=90;p.combo=0;
- burst(p.x,p.y,'#f55',16);
- if(p.l<=0)gameOver=true;
-}
-function clearStage(){
- if(stageEnd)return;
- stageEnd=120;
- stage++;
- // Stage clear halves accumulated bullet durability, rounded down.
- enemyBulletHP=Math.max(1,Math.floor(enemyBulletHP/2));
- burst(W/2,250,'#fff',30);
-}
-function update(){
- if(!started||gameOver)return;
- if(stageEnd>0){stageEnd--;if(stageEnd===0){en=[];eb=[];el=[];frame=0}return}
- frame++;
- if(p.inv>0)p.inv--;
- if(p.od>0)p.od--;
- if(p.odFlash>0)p.odFlash--;
- if(p.ct>0)p.ct--;else p.combo=0;
-
- if(touch.on){
-   p.x+=(touch.x-p.x)*.24;p.y+=(touch.y-p.y)*.24;
- }else{
-   p.x+=((keys.d||keys.arrowright)-(keys.a||keys.arrowleft))*4.2;
-   p.y+=((keys.s||keys.arrowdown)-(keys.w||keys.arrowup))*4.2;
- }
- p.x=Math.max(12,Math.min(W-12,p.x));p.y=Math.max(30,Math.min(H-30,p.y));
-
- if(frame%7===0)shoot();
- if(keys.z)p.shot=1;if(keys.x)p.shot=0;
- if(keys.c){keys.c=0;bomb()}
- if(keys.v){keys.v=0;activateOD()}
-
- const cyc=frame%540;
- const phase=cyc<180?'QUIET':cyc<360?'BUILD':cyc<450?'CLIMAX':'BREAK';
- let interval=phase==='QUIET'?95:phase==='BUILD'?62:phase==='CLIMAX'?38:120;
- if(p.od)interval=Math.max(1,Math.round(interval/1.2));
- if(frame%interval===0)wave();
-
- // Real 1.2x OD bullet density: additional volleys.
- if(p.od&&frame%25===0){
-   for(const e of en)if(e.y>0&&e.y<300&&Math.random()<.3)fire(e);
- }
-
- for(const q of pb){q.x+=q.vx;q.y+=q.vy}
- for(const q of lasers)q.t++;
- for(const e of en){e.t++;e.y+=e.vy;if(e.t%70===0)fire(e)}
- for(const q of eb){q.x+=q.vx;q.y+=q.vy}
- for(const q of el)q.t++;
-
- // OD special bullets: ONLY direct collision removes/damages that bullet.
- // No area-of-effect and no chain reaction.
- if(p.od&&p.shot){
-   for(const q of pb){
-     for(const z of eb){
-       if(z.dead)continue;
-       const dx=q.x-z.x,dy=q.y-z.y;
-       if(dx*dx+dy*dy<(q.r||3+z.r)**2){
-         z.hp-=1; q.dead=true;
-         burst(z.x,z.y,z.hp<=0?'#9ff':'#5ff',z.hp<=0?4:2);
-         p.score+=z.hp<=0?20:5;
-         if(z.hp<=0){z.dead=true;combo(.15)}
-         break;
-       }
-     }
-   }
- }
-
- // Player shots hit enemies.
- for(const q of pb)for(const e of en){
-   if(e.dead)continue;
-   const dx=q.x-e.x,dy=q.y-e.y;
-   if(dx*dx+dy*dy<12*12){e.hp-=q.dam;q.dead=true}
- }
- // Player laser cancels enemy laser in BOTH normal and OD.
- for(const q of lasers){
-   for(const z of el)if(Math.abs(z.x-q.x)<q.w+3)z.dead=true;
-   for(const e of en)if(!e.dead&&Math.abs(e.x-q.x)<q.w+(e.k===3?10:7))e.hp-=q.dam;
- }
- for(const e of en)if(e.hp<=0&&!e.dead){
-   e.dead=true;p.score+=e.k===1?100:e.k===2?350:1000;
-   combo(e.k===1?1:e.k===2?2:5);burst(e.x,e.y,e.k===3?'#c6f':'#fff',e.k===3?14:7);
- }
-
- for(const q of eb){
-   const dx=q.x-p.x,dy=q.y-p.y;
-   if(dx*dx+dy*dy<(p.r+q.r)*(p.r+q.r))hit();
-   else if(dx*dx+dy*dy<27*27&&!q.g){q.g=true;p.score+=2;p.g=Math.min(1,p.g+.008)}
- }
- for(const z of el)if(Math.abs(z.x-p.x)<6&&z.t>80)hit();
-
- en=en.filter(e=>!e.dead&&e.y<H+30);
- pb=pb.filter(q=>!q.dead&&q.y>-20);
- eb=eb.filter(q=>!q.dead&&q.x>-20&&q.x<W+20&&q.y>-20&&q.y<H+20);
- lasers=lasers.filter(q=>q.t<8);
- el=el.filter(q=>!q.dead&&q.t<55);
- for(const q of fx){q.x+=q.vx;q.y+=q.vy;q.t--}
- fx=fx.filter(q=>q.t>0);
-
- // Demo stage progression.
- if(frame===1500)clearStage();
-}
-function ship(X,Y){
- x.fillStyle='#17395f';x.fillRect(X-11,Y-3,22,7);
- x.fillStyle='#38d9ff';x.fillRect(X-3,Y-16,6,21);x.fillRect(X-8,Y-9,16,8);
- x.fillStyle='#fff';x.fillRect(X-2,Y-10,4,8);
- x.fillStyle='#72f5ff';x.fillRect(X-13,Y-1,8,4);x.fillRect(X+5,Y-1,8,4);
- x.fillStyle='#fff';x.fillRect(X-1,Y-19,2,4);
-}
-function draw(){
- x.fillStyle='#05070c';x.fillRect(0,0,W,H);
- if(!started){
-   x.fillStyle='#fff';x.textAlign='center';x.font='bold 24px monospace';x.fillText('PIXEL BATTLE STG',180,80);
-   x.font='14px monospace';x.fillText('SELECT FIGHTER',180,110);
-   ships.forEach((s,i)=>{
-     const y=155+i*70;x.fillStyle=i===sel?'#244a70':'#182030';x.fillRect(35,y-25,290,52);
-     x.fillStyle='#fff';x.textAlign='left';x.fillText((i+1)+'. '+s[0],55,y);
-     x.font='11px monospace';x.fillText(s[1],190,y);x.font='14px monospace';
-   });
-   x.textAlign='center';x.fillText('Tap / ENTER to start   1-5: select',180,545);
-   requestAnimationFrame(draw);return;
- }
- x.fillStyle='#0e1727';x.fillRect(0,0,W,95);x.fillStyle='#102b24';x.fillRect(0,95,W,190);x.fillStyle='#082638';x.fillRect(0,285,W,355);
- for(const q of eb){x.fillStyle=q.br?'#7ff':'#fff';x.fillRect(q.x-2,q.y-2,4,4)}
- for(const q of pb){x.fillStyle=p.od?'#9ff':'#8ff';x.fillRect(q.x-2,q.y-5,4,8)}
- for(const q of lasers){x.fillStyle='#fff';x.fillRect(q.x-q.w,0,q.w*2,p.y)}
- for(const q of el){x.fillStyle='#f44';x.fillRect(q.x-2,q.t,4,H-q.t)}
- for(const e of en){
-   x.fillStyle=e.k===1?'#f66':e.k===2?'#fc5':'#c6f';
-   const s=e.k===3?10:e.k===2?7:5;x.fillRect(e.x-s,e.y-2,s*2,4);x.fillRect(e.x-3,e.y-s,6,s*2);
- }
- for(const q of fx){x.fillStyle=q.c;x.fillRect(q.x-2,q.y-2,4,4)}
- if(p.inv%6<3)ship(p.x,p.y);
-
- x.fillStyle='#fff';x.font='12px monospace';x.textAlign='left';
- x.fillText('STAGE '+stage,8,18);x.fillText('SCORE '+p.score,8,35);
- x.fillText('LIFE '+p.l+'  BOMB '+p.bomb,8,52);
- x.fillText('OD '+p.stock+'/3',8,69);
- x.fillStyle='#233';x.fillRect(60,61,90,7);x.fillStyle='#6ff';x.fillRect(60,61,90*p.g,7);
- x.textAlign='right';x.fillStyle='#fff';x.fillText(ships[sel][0]+' '+(p.shot?'SHOT':'LASER'),352,18);
- x.fillText('COMBO x'+p.combo,352,35);
- x.fillText('BULLET HP '+enemyBulletHP,352,52);
-
- if(p.od){
-   x.textAlign='center';x.font='bold 18px monospace';x.fillStyle='#9ff';
-   x.fillText('OVERDRIVE '+Math.ceil(p.od/60)+'s',180,85);
- }
- if(p.odFlash){
-   x.fillStyle='rgba(255,255,255,.55)';x.fillRect(0,0,W,H);
-   x.fillStyle='#fff';x.font='bold 30px monospace';x.textAlign='center';x.fillText('OVERDRIVE!',180,320);
- }
- if(stageEnd){
-   x.fillStyle='rgba(255,255,255,.85)';x.fillRect(0,0,W,H);
-   x.fillStyle='#111';x.font='bold 28px monospace';x.textAlign='center';x.fillText('STAGE CLEAR',180,280);
-   x.font='14px monospace';x.fillText('BULLET HP → '+enemyBulletHP,180,315);
- }
- if(gameOver){
-   x.fillStyle='rgba(0,0,0,.75)';x.fillRect(0,0,W,H);x.fillStyle='#fff';x.textAlign='center';
-   x.font='bold 28px monospace';x.fillText('GAME OVER',180,280);x.font='14px monospace';x.fillText('TAP / ENTER TO RETRY',180,315);
- }
- requestAnimationFrame(draw);
-}
+"use strict";
+const c=document.getElementById("game"),g=c.getContext("2d"),W=360,H=640;
+g.imageSmoothingEnabled=false;
+let started=false,over=false,drag=false,tx=180,ty=550,frame=0,score=0,lives=3,bombs=3,weapon="shot";
+const p={x:180,y:550,inv:0,od:0},shots=[],en=[],eb=[];
+function start(){started=true;over=false;frame=0;score=0;lives=3;bombs=3;weapon="shot";
+p.x=180;p.y=550;p.inv=45;p.od=0;tx=180;ty=550;shots.length=0;en.length=0;eb.length=0}
+function player(){const X=Math.round(p.x),Y=Math.round(p.y);
+g.fillStyle="#fff";g.fillRect(X-2,Y-24,4,6);g.fillRect(X-15,Y-8,30,7);
+g.fillStyle="#18ddff";g.fillRect(X-8,Y-17,16,23);g.fillRect(X-18,Y-4,36,7);
+g.fillStyle="#cfffff";g.fillRect(X-3,Y-20,6,10);
+g.fillStyle="#1768b5";g.fillRect(X-3,Y-12,6,6);
+g.fillStyle="#63adff";g.fillRect(X-16,Y-2,7,4);g.fillRect(X+9,Y-2,7,4);
+g.fillStyle="#fff36b";g.fillRect(X-7,Y+5,5,9);g.fillRect(X+2,Y+5,5,9);
+g.strokeStyle="#fff";g.lineWidth=2;g.strokeRect(X-19,Y-24,38,39)}
+function move(e){const r=c.getBoundingClientRect();tx=(e.clientX-r.left)*W/r.width;ty=(e.clientY-r.top)*H/r.height}
+function shoot(){if(weapon==="shot"){shots.push({x:p.x-6,y:p.y-22,vy:-8});shots.push({x:p.x+6,y:p.y-22,vy:-8})}
+else shots.push({x:p.x,y:p.y-25,vy:-10,laser:true})}
+function spawn(){en.push({x:20+Math.random()*320,y:-15,hp:1+Math.floor(Math.random()*3),vy:1})}
+function update(){if(!started||over)return;frame++;if(p.inv>0)p.inv--;if(p.od>0)p.od--;
+p.x+=(tx-p.x)*.3;p.y+=(ty-p.y)*.3;p.x=Math.max(20,Math.min(340,p.x));p.y=Math.max(35,Math.min(605,p.y));
+if(frame%8===0)shoot();if(frame%80===0)spawn();
+en.forEach(e=>{e.y+=e.vy;if(frame%70===0){const dx=p.x-e.x,dy=p.y-e.y,l=Math.hypot(dx,dy)||1;
+eb.push({x:e.x,y:e.y,vx:dx/l*2,vy:dy/l*2})}});
+shots.forEach(s=>s.y+=s.vy);eb.forEach(b=>{b.x+=b.vx;b.y+=b.vy});
+shots.forEach(s=>en.forEach(e=>{if(e.hp>0&&Math.hypot(s.x-e.x,s.y-e.y)<12){e.hp--;s.y=-100;if(e.hp<=0)score+=100}}));
+eb.forEach(b=>{if(Math.hypot(b.x-p.x,b.y-p.y)<9&&p.inv<=0&&p.od<=0){lives--;p.inv=90;if(lives<=0)over=true}});
+for(let i=en.length-1;i>=0;i--)if(en[i].hp<=0||en[i].y>670)en.splice(i,1);
+for(let i=shots.length-1;i>=0;i--)if(shots[i].y<-30)shots.splice(i,1);
+for(let i=eb.length-1;i>=0;i--)if(eb[i].x<-30||eb[i].x>390||eb[i].y<-30||eb[i].y>670)eb.splice(i,1)}
+function draw(){g.fillStyle="#07101b";g.fillRect(0,0,W,H);g.fillStyle="#10243a";
+for(let y=0;y<H;y+=32)g.fillRect(0,y,W,1);
+g.fillStyle="#fff";g.font="bold 12px monospace";g.textAlign="left";
+g.fillText("PIXEL BATTLE STG",8,18);g.fillText("SCORE "+score,8,36);g.fillText("LIFE "+lives+"  BOMB "+bombs,8,54);
+eb.forEach(b=>{g.fillStyle="#ff5264";g.fillRect(b.x-4,b.y-4,8,8)});
+shots.forEach(s=>{g.fillStyle=s.laser?"#fff":"#7ff7ff";g.fillRect(s.x-2,s.y-7,4,10)});
+en.forEach(e=>{g.fillStyle="#ff5b6c";g.fillRect(e.x-8,e.y-5,16,10);g.fillRect(e.x-4,e.y-9,8,18)});
+if(!started){g.fillStyle="rgba(0,0,0,.82)";g.fillRect(0,0,W,H);g.fillStyle="#fff";g.textAlign="center";
+g.font="bold 25px monospace";g.fillText("PIXEL BATTLE STG",180,230);g.fillStyle="#7ff7ff";
+g.font="bold 18px monospace";g.fillText("TAP TO START",180,310)}
+else if(p.inv===0||p.inv%6<3)player();
+if(over){g.fillStyle="rgba(0,0,0,.75)";g.fillRect(0,0,W,H);g.fillStyle="#fff";g.textAlign="center";
+g.font="bold 28px monospace";g.fillText("GAME OVER",180,290);g.font="14px monospace";g.fillText("TAP TO RETRY",180,320)}
+requestAnimationFrame(draw)}
+c.addEventListener("pointerdown",e=>{e.preventDefault();if(!started||over){start();return}drag=true;move(e)});
+c.addEventListener("pointermove",e=>{if(drag)move(e)});c.addEventListener("pointerup",()=>drag=false);c.addEventListener("pointercancel",()=>drag=false);
+document.getElementById("shot").onpointerdown=e=>{e.preventDefault();if(!started||over)start();else weapon="shot"};
+document.getElementById("laser").onpointerdown=e=>{e.preventDefault();if(!started||over)start();else weapon="laser"};
+document.getElementById("bomb").onpointerdown=e=>{e.preventDefault();if(!started||over)start();else if(bombs){bombs--;p.inv=60;eb.length=0}};
+document.getElementById("od").onpointerdown=e=>{e.preventDefault();if(!started||over)start();else{p.od=600;p.inv=20}};
 setInterval(update,1000/60);draw();
-</script>
-</body></html>
+</script></body></html>

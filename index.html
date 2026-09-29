@@ -9,6 +9,7 @@ html,body{margin:0;width:100%;height:100%;background:#05070c;color:#fff;overflow
 #wrap{height:100%;display:flex;align-items:center;justify-content:center}
 #box{position:relative;width:min(100vw,56.25vh)}
 canvas{display:block;width:100%;aspect-ratio:360/640;background:#07101b;image-rendering:pixelated;touch-action:none}
+#startHit{position:absolute;left:50%;top:265px;transform:translateX(-50%);width:220px;height:90px;background:transparent;border:0;z-index:4;touch-action:manipulation}
 #controls{position:absolute;left:8px;bottom:12px;display:flex;flex-direction:column;gap:10px;z-index:5}
 .ctrl{width:58px;height:58px;border-radius:50%;background:rgba(12,28,45,.88);color:#fff;border:2px solid #6d9bb8;font:bold 10px monospace;touch-action:none;padding:0}
 #weapon{border-color:#7ff7ff}
@@ -19,6 +20,7 @@ canvas{display:block;width:100%;aspect-ratio:360/640;background:#07101b;image-re
 <body>
 <div id="wrap"><div id="box">
 <canvas id="game" width="360" height="640"></canvas>
+<button id="startHit" aria-label="start"></button>
 <div id="controls">
 <button class="ctrl" id="weapon">SHOT</button>
 <button class="ctrl" id="bomb">BOMB<br>3</button>
@@ -46,12 +48,25 @@ const p={x:180,y:550,inv:0,odInv:0};
 const shots=[],en=[],eb=[],fx=[];
 
 function reset(){
- started=true;over=false;clear=false;frame=0;score=0;lives=3;bombs=3;
+ started=true;over=false;clear=false;
+ document.getElementById("startHit").style.display="none";frame=0;score=0;lives=3;bombs=3;
  weapon="shot";combo=0;comboTimer=0;graze=0;odGauge=0;odStock=0;od=0;
  enemyBulletHP=1;p.x=180;p.y=550;p.inv=45;p.odInv=0;tx=180;ty=550;
  shots.length=0;en.length=0;eb.length=0;fx.length=0;
  updateButtons();
 }
+document.getElementById("startHit").addEventListener("pointerdown",e=>{
+ e.preventDefault();e.stopPropagation();
+ if(!started||over)reset();
+});
+document.getElementById("startHit").addEventListener("touchstart",e=>{
+ e.preventDefault();e.stopPropagation();
+ if(!started||over)reset();
+},{passive:false});
+document.getElementById("startHit").addEventListener("click",e=>{
+ e.preventDefault();e.stopPropagation();
+ if(!started||over)reset();
+});
 function updateButtons(){
  document.getElementById("weapon").innerHTML=weapon==="shot"?"SHOT":"LASER";
  document.getElementById("bomb").innerHTML="BOMB<br>"+bombs;
@@ -78,7 +93,7 @@ function move(e){
 }
 function spawn(k,x){
  const hp=k===1?1:k===2?8:35;
- en.push({x,y:-20,k,hp,vy:k===3?.45:1});
+ en.push({x:x,y:-20,k:k,hp:hp,vy:k===3?.45:1,t:0,dead:false});
 }
 function wave(){
  const r=Math.random();
@@ -274,5 +289,6 @@ addEventListener("keydown",e=>{
   if(k==="v")activateOD();
  }
 });
+document.getElementById("startHit").style.display="block";
 setInterval(update,1000/60);updateButtons();draw();
 </script></body></html>

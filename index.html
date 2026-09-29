@@ -1,83 +1,278 @@
-<!doctype html><html lang="ja"><head>
+<!doctype html>
+<html lang="ja">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>PIXEL BATTLE STG v10</title>
+<title>PIXEL BATTLE STG v12</title>
 <style>
 html,body{margin:0;width:100%;height:100%;background:#05070c;color:#fff;overflow:hidden;font-family:system-ui}
 #wrap{height:100%;display:flex;align-items:center;justify-content:center}
-#box{width:min(100vw,56.25vh)}
+#box{position:relative;width:min(100vw,56.25vh)}
 canvas{display:block;width:100%;aspect-ratio:360/640;background:#07101b;image-rendering:pixelated;touch-action:none}
-#controls{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px}
-button{height:52px;background:#102033;color:#fff;border:2px solid #46708c;border-radius:8px;font:bold 14px monospace;touch-action:none}
-</style></head><body><div id="wrap"><div id="box">
+#controls{position:absolute;left:8px;bottom:12px;display:flex;flex-direction:column;gap:10px;z-index:5}
+.ctrl{width:58px;height:58px;border-radius:50%;background:rgba(12,28,45,.88);color:#fff;border:2px solid #6d9bb8;font:bold 10px monospace;touch-action:none;padding:0}
+#weapon{border-color:#7ff7ff}
+#bomb{border-color:#fff36b}
+#od{border-color:#c6a6ff}
+</style>
+</head>
+<body>
+<div id="wrap"><div id="box">
 <canvas id="game" width="360" height="640"></canvas>
-<div id="controls"><button id="shot">SHOT</button><button id="laser">LASER</button>
-<button id="bomb">BOMB</button><button id="od">OVERDRIVE</button></div>
+<div id="controls">
+<button class="ctrl" id="weapon">SHOT</button>
+<button class="ctrl" id="bomb">BOMB<br>3</button>
+<button class="ctrl" id="od">OD<br>0/3</button>
+</div>
 </div></div>
 <script>
 "use strict";
 const c=document.getElementById("game"),g=c.getContext("2d"),W=360,H=640;
 g.imageSmoothingEnabled=false;
-let started=false,over=false,drag=false,tx=180,ty=550,frame=0,score=0,lives=3,bombs=3,weapon="shot";
-let lastTouchX=0,lastTouchY=0;
-const p={x:180,y:550,inv:0,od:0},shots=[],en=[],eb=[];
-function start(){started=true;over=false;frame=0;score=0;lives=3;bombs=3;weapon="shot";
-p.x=180;p.y=550;p.inv=45;p.od=0;tx=180;ty=550;shots.length=0;en.length=0;eb.length=0}
-function player(){const X=Math.round(p.x),Y=Math.round(p.y);
-g.fillStyle="#fff";g.fillRect(X-2,Y-24,4,6);g.fillRect(X-15,Y-8,30,7);
-g.fillStyle="#18ddff";g.fillRect(X-8,Y-17,16,23);g.fillRect(X-18,Y-4,36,7);
-g.fillStyle="#cfffff";g.fillRect(X-3,Y-20,6,10);
-g.fillStyle="#1768b5";g.fillRect(X-3,Y-12,6,6);
-g.fillStyle="#63adff";g.fillRect(X-16,Y-2,7,4);g.fillRect(X+9,Y-2,7,4);
-g.fillStyle="#fff36b";g.fillRect(X-7,Y+5,5,9);g.fillRect(X+2,Y+5,5,9);
-g.strokeStyle="#fff";g.lineWidth=2;g.strokeRect(X-19,Y-24,38,39)}
-function move(e){
-const r=c.getBoundingClientRect();
-const nx=(e.clientX-r.left)*W/r.width;
-const ny=(e.clientY-r.top)*H/r.height;
-if(drag){tx+=nx-lastTouchX;ty+=ny-lastTouchY}
-lastTouchX=nx;lastTouchY=ny;
+
+const ships=[
+ {name:"VALKYRIE",desc:"BALANCED",shot:1,laser:1,graze:1},
+ {name:"FALCON",desc:"LASER",shot:.9,laser:1.35,graze:1},
+ {name:"BULLET",desc:"POWER",shot:1.25,laser:.9,graze:.9},
+ {name:"PHANTOM",desc:"GRAZE",shot:.95,laser:1,graze:1.4},
+ {name:"NOVA",desc:"SPREAD",shot:1.05,laser:.95,graze:1.15}
+];
+let selected=0,started=false,over=false,clear=false;
+let drag=false,tx=180,ty=550,lastX=180,lastY=550;
+let frame=0,score=0,lives=3,bombs=3,weapon="shot";
+let combo=0,comboTimer=0,graze=0,odGauge=0,odStock=0,od=0;
+let enemyBulletHP=1;
+const p={x:180,y:550,inv:0,odInv:0};
+const shots=[],en=[],eb=[],fx=[];
+
+function reset(){
+ started=true;over=false;clear=false;frame=0;score=0;lives=3;bombs=3;
+ weapon="shot";combo=0;comboTimer=0;graze=0;odGauge=0;odStock=0;od=0;
+ enemyBulletHP=1;p.x=180;p.y=550;p.inv=45;p.odInv=0;tx=180;ty=550;
+ shots.length=0;en.length=0;eb.length=0;fx.length=0;
+ updateButtons();
 }
-function shoot(){if(weapon==="shot"){shots.push({x:p.x-6,y:p.y-22,vy:-8});shots.push({x:p.x+6,y:p.y-22,vy:-8})}
-else shots.push({x:p.x,y:p.y-25,vy:-10,laser:true})}
-function spawn(){en.push({x:20+Math.random()*320,y:-15,hp:1+Math.floor(Math.random()*3),vy:1})}
-function update(){if(!started||over)return;frame++;if(p.inv>0)p.inv--;if(p.od>0)p.od--;
-p.x+=(tx-p.x)*.3;p.y+=(ty-p.y)*.3;p.x=Math.max(20,Math.min(340,p.x));p.y=Math.max(35,Math.min(605,p.y));
-if(frame%8===0)shoot();if(frame%80===0)spawn();
-en.forEach(e=>{e.y+=e.vy;if(frame%70===0){const dx=p.x-e.x,dy=p.y-e.y,l=Math.hypot(dx,dy)||1;
-eb.push({x:e.x,y:e.y,vx:dx/l*2,vy:dy/l*2})}});
-shots.forEach(s=>s.y+=s.vy);eb.forEach(b=>{b.x+=b.vx;b.y+=b.vy});
-shots.forEach(s=>en.forEach(e=>{if(e.hp>0&&Math.hypot(s.x-e.x,s.y-e.y)<12){e.hp--;s.y=-100;if(e.hp<=0)score+=100}}));
-eb.forEach(b=>{if(Math.hypot(b.x-p.x,b.y-p.y)<9&&p.inv<=0&&p.od<=0){lives--;p.inv=90;if(lives<=0)over=true}});
-for(let i=en.length-1;i>=0;i--)if(en[i].hp<=0||en[i].y>670)en.splice(i,1);
-for(let i=shots.length-1;i>=0;i--)if(shots[i].y<-30)shots.splice(i,1);
-for(let i=eb.length-1;i>=0;i--)if(eb[i].x<-30||eb[i].x>390||eb[i].y<-30||eb[i].y>670)eb.splice(i,1)}
-function draw(){g.fillStyle="#07101b";g.fillRect(0,0,W,H);g.fillStyle="#10243a";
-for(let y=0;y<H;y+=32)g.fillRect(0,y,W,1);
-g.fillStyle="#fff";g.font="bold 12px monospace";g.textAlign="left";
-g.fillText("PIXEL BATTLE STG",8,18);g.fillText("SCORE "+score,8,36);g.fillText("LIFE "+lives+"  BOMB "+bombs,8,54);
-eb.forEach(b=>{g.fillStyle="#ff5264";g.fillRect(b.x-4,b.y-4,8,8)});
-shots.forEach(s=>{g.fillStyle=s.laser?"#fff":"#7ff7ff";g.fillRect(s.x-2,s.y-7,4,10)});
-en.forEach(e=>{g.fillStyle="#ff5b6c";g.fillRect(e.x-8,e.y-5,16,10);g.fillRect(e.x-4,e.y-9,8,18)});
-if(!started){g.fillStyle="rgba(0,0,0,.82)";g.fillRect(0,0,W,H);g.fillStyle="#fff";g.textAlign="center";
-g.font="bold 25px monospace";g.fillText("PIXEL BATTLE STG",180,230);g.fillStyle="#7ff7ff";
-g.font="bold 18px monospace";g.fillText("TAP TO START",180,310)}
-else if(p.inv===0||p.inv%6<3)player();
-if(over){g.fillStyle="rgba(0,0,0,.75)";g.fillRect(0,0,W,H);g.fillStyle="#fff";g.textAlign="center";
-g.font="bold 28px monospace";g.fillText("GAME OVER",180,290);g.font="14px monospace";g.fillText("TAP TO RETRY",180,320)}
-requestAnimationFrame(draw)}
+function updateButtons(){
+ document.getElementById("weapon").innerHTML=weapon==="shot"?"SHOT":"LASER";
+ document.getElementById("bomb").innerHTML="BOMB<br>"+bombs;
+ document.getElementById("od").innerHTML="OD<br>"+odStock+"/3";
+}
+function burst(X,Y,col="#fff",n=8){
+ for(let i=0;i<n;i++)fx.push({x:X,y:Y,vx:(Math.random()-.5)*3,vy:(Math.random()-.5)*3,t:20,c:col});
+}
+function addCombo(v){
+ combo+=v;comboTimer=150;
+ odGauge=Math.min(100,odGauge+v*3);
+ if(odGauge>=100){odGauge-=100;odStock=Math.min(3,odStock+1);updateButtons()}
+}
+function gainGraze(){
+ graze++;score+=10;comboTimer=150;
+ odGauge=Math.min(100,odGauge+1.5*ships[selected].graze);
+ if(odGauge>=100){odGauge-=100;odStock=Math.min(3,odStock+1);updateButtons()}
+}
+function move(e){
+ const r=c.getBoundingClientRect();
+ const nx=(e.clientX-r.left)*W/r.width,ny=(e.clientY-r.top)*H/r.height;
+ if(drag){tx+=nx-lastX;ty+=ny-lastY}
+ lastX=nx;lastY=ny;
+}
+function spawn(k,x){
+ const hp=k===1?1:k===2?8:35;
+ en.push({x,y:-20,k,hp,vy:k===3?.45:1});
+}
+function wave(){
+ const r=Math.random();
+ if(r<.38){for(let i=0;i<5;i++)spawn(1,35+i*65)}
+ else if(r<.72){spawn(2,60);spawn(1,135);spawn(1,205);spawn(2,290)}
+ else {spawn(3,180);spawn(1,60);spawn(2,290);spawn(1,110)}
+}
+function fire(e){
+ const n=e.k===3?7:e.k===2?3:1;
+ const sp=(e.k===1?2:e.k===2?1.55:1.1)*(od?1.2:1);
+ for(let i=0;i<n;i++){
+  const a=Math.PI/2+(i-(n-1)/2)*.18;
+  eb.push({x:e.x,y:e.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,r:2.5,hp:enemyBulletHP,g:false});
+ }
+}
+function shoot(){
+ if(weapon==="shot"){
+  const spread=selected===4?[ -10,0,10]:[-5,5];
+  spread.forEach(dx=>shots.push({x:p.x+dx,y:p.y-23,vy:-8,dam:1.5*ships[selected].shot,od:!!od,laser:false}));
+ }else{
+  shots.push({x:p.x,y:p.y-25,vy:-10,dam:(od?7:4)*ships[selected].laser,laser:true,od:!!od,t:0});
+ }
+}
+function bomb(){
+ if(!started||over||bombs<=0||p.inv>0)return;
+ bombs--;p.inv=60;eb.forEach(b=>b.dead=true);
+ en.forEach(e=>{e.hp-=e.k===3?15:8});
+ score+=500;burst(p.x,p.y,"#fff",24);updateButtons();
+}
+function activateOD(){
+ if(!started||over||od||odStock<=0)return;
+ od=odStock*600;odStock=0;p.odInv=18;enemyBulletHP+=1;
+ burst(p.x,p.y,"#9ff",30);updateButtons();
+}
+function hit(){
+ if(p.inv>0||p.odInv>0||od)return;
+ lives--;p.inv=90;combo=0;comboTimer=0;burst(p.x,p.y,"#f55",18);
+ if(lives<=0)over=true;
+}
+function update(){
+ if(!started||over||clear)return;
+ frame++;
+ if(p.inv>0)p.inv--; if(p.odInv>0)p.odInv--; if(od>0)od--;
+ if(comboTimer>0)comboTimer--; else combo=0;
+
+ p.x+=(tx-p.x)*.3;p.y+=(ty-p.y)*.3;
+ p.x=Math.max(20,Math.min(340,p.x));p.y=Math.max(35,Math.min(605,p.y));
+
+ if(frame%7===0)shoot();
+ if(frame%75===0)wave();
+
+ en.forEach(e=>{
+  e.y+=e.vy;e.t=(e.t||0)+1;
+  if(e.t%70===0)fire(e);
+ });
+ shots.forEach(s=>{s.y+=s.vy;s.t=(s.t||0)+1});
+ eb.forEach(b=>{b.x+=b.vx;b.y+=b.vy});
+
+ // OD special shots directly damage one bullet only.
+ if(od){
+  for(const s of shots)if(!s.laser&&s.od&&!s.dead){
+   for(const b of eb)if(!b.dead){
+    const dx=s.x-b.x,dy=s.y-b.y;
+    if(dx*dx+dy*dy<30){b.hp--;s.dead=true;
+     if(b.hp<=0){b.dead=true;score+=20;addCombo(.2);burst(b.x,b.y,"#9ff",4)}
+     else burst(b.x,b.y,"#5ff",2);
+     break;
+    }
+   }
+  }
+ }
+ // Player shots hit enemies.
+ for(const s of shots)if(!s.dead){
+  for(const e of en)if(e.hp>0){
+   const dx=s.x-e.x,dy=s.y-e.y;
+   if(dx*dx+dy*dy<144){
+    e.hp-=s.dam;if(!s.laser)s.dead=true;
+    if(e.hp<=0){score+=e.k===1?100:e.k===2?350:1000;addCombo(e.k===1?1:e.k===2?2:5);burst(e.x,e.y,e.k===3?"#c6f":"#fff",e.k===3?14:7)}
+    if(!s.laser)break;
+   }
+  }
+ }
+ // Laser continuously damages enemies.
+ for(const s of shots)if(s.laser){
+  for(const e of en)if(e.hp>0&&Math.abs(e.x-s.x)<(od?10:6)){
+   e.hp-=s.dam/10;
+   if(e.hp<=0){score+=e.k===1?100:e.k===2?350:1000;addCombo(e.k===1?1:e.k===2?2:5);burst(e.x,e.y,e.k===3?"#c6f":"#fff",8)}
+  }
+ }
+ // Graze and hit.
+ for(const b of eb)if(!b.dead){
+  const dx=b.x-p.x,dy=b.y-p.y,d2=dx*dx+dy*dy;
+  if(d2<64){hit()}
+  else if(d2<27*27&&!b.g){b.g=true;gainGraze();burst(b.x,b.y,"#9ff",2)}
+ }
+ for(const e of en)if(e.hp<=0)e.dead=true;
+
+ for(let i=en.length-1;i>=0;i--)if(en[i].dead||en[i].y>670)en.splice(i,1);
+ for(let i=shots.length-1;i>=0;i--)if(shots[i].dead||shots[i].y<-30)shots.splice(i,1);
+ for(let i=eb.length-1;i>=0;i--)if(eb[i].dead||eb[i].x<-30||eb[i].x>390||eb[i].y<-30||eb[i].y>670)eb.splice(i,1);
+ for(const f of fx){f.x+=f.vx;f.y+=f.vy;f.t--}
+ while(fx.length&&fx[0].t<=0)fx.shift();
+
+ if(frame===1800){
+  enemyBulletHP=Math.max(1,Math.floor(enemyBulletHP/2));
+  clear=true;
+ }
+}
+function player(){
+ const X=Math.round(p.x),Y=Math.round(p.y);
+ g.fillStyle="#fff";g.fillRect(X-2,Y-24,4,6);g.fillRect(X-15,Y-8,30,7);
+ g.fillStyle="#18ddff";g.fillRect(X-8,Y-17,16,23);g.fillRect(X-18,Y-4,36,7);
+ g.fillStyle="#cfffff";g.fillRect(X-3,Y-20,6,10);
+ g.fillStyle="#1768b5";g.fillRect(X-3,Y-12,6,6);
+ g.fillStyle="#63adff";g.fillRect(X-16,Y-2,7,4);g.fillRect(X+9,Y-2,7,4);
+ g.fillStyle="#fff36b";g.fillRect(X-7,Y+5,5,9);g.fillRect(X+2,Y+5,5,9);
+ g.strokeStyle="#fff";g.lineWidth=2;g.strokeRect(X-19,Y-24,38,39);
+}
+function draw(){
+ g.fillStyle="#07101b";g.fillRect(0,0,W,H);
+ g.fillStyle="#10243a";for(let y=0;y<H;y+=32)g.fillRect(0,y,W,1);
+
+ if(!started){
+  g.fillStyle="rgba(0,0,0,.88)";g.fillRect(0,0,W,H);
+  g.fillStyle="#fff";g.textAlign="center";g.font="bold 25px monospace";
+  g.fillText("PIXEL BATTLE STG",180,90);
+  g.font="bold 15px monospace";g.fillText("SELECT FIGHTER",180,120);
+  ships.forEach((s,i)=>{
+   const y=170+i*62;g.fillStyle=i===selected?"#16435d":"#142131";g.fillRect(30,y-24,300,48);
+   g.fillStyle=i===selected?"#7ff7ff":"#fff";g.textAlign="left";g.font="bold 13px monospace";
+   g.fillText((i+1)+". "+s.name,45,y-2);g.font="10px monospace";g.fillText(s.desc,190,y-2);
+  });
+  g.textAlign="center";g.font="13px monospace";g.fillStyle="#fff";g.fillText("TAP TO START",180,535);
+  g.fillText("1-5 / TAP: SELECT",180,558);
+  requestAnimationFrame(draw);return;
+ }
+
+ g.fillStyle="#fff";g.font="bold 11px monospace";g.textAlign="left";
+ g.fillText("STAGE 1",8,16);g.fillText("SCORE "+score,8,32);g.fillText("LIFE "+lives,8,48);
+ g.fillText("GRAZE "+graze,8,64);
+ g.fillText("COMBO x"+Math.floor(combo),8,80);
+
+ g.fillStyle="#24344a";g.fillRect(8,86,110,7);g.fillStyle="#7ff7ff";g.fillRect(8,86,110*odGauge/100,7);
+ g.fillStyle="#fff";g.fillText("OD",122,93);
+
+ eb.forEach(b=>{g.fillStyle=b.hp>1?"#ff9c4a":"#ff5264";g.fillRect(b.x-4,b.y-4,8,8)});
+ shots.forEach(s=>{g.fillStyle=s.laser?"#fff":"#7ff7ff";g.fillRect(s.x-2,s.y-(s.laser?0:7),4,s.laser?H:10)});
+ en.forEach(e=>{
+  g.fillStyle=e.k===1?"#ff5b6c":e.k===2?"#ffc44d":"#c68cff";
+  const s=e.k===3?11:e.k===2?8:6;
+  g.fillRect(e.x-s,e.y-3,s*2,6);g.fillRect(e.x-3,e.y-s,6,s*2);
+ });
+ fx.forEach(f=>{g.fillStyle=f.c;g.fillRect(f.x-2,f.y-2,4,4)});
+ if(p.inv===0||p.inv%6<3)player();
+
+ g.textAlign="right";g.fillStyle="#fff";g.fillText(ships[selected].name,352,16);
+ g.fillText(weapon==="shot"?"SHOT":"LASER",352,32);
+ if(od){g.fillStyle="#9ff";g.font="bold 16px monospace";g.fillText("OVERDRIVE "+Math.ceil(od/60)+"s",352,55)}
+ if(clear){
+  g.fillStyle="rgba(255,255,255,.88)";g.fillRect(0,0,W,H);g.fillStyle="#111";g.textAlign="center";
+  g.font="bold 28px monospace";g.fillText("STAGE CLEAR",180,280);
+  g.font="14px monospace";g.fillText("BULLET HP -> "+enemyBulletHP,180,315);
+ }
+ if(over){
+  g.fillStyle="rgba(0,0,0,.78)";g.fillRect(0,0,W,H);g.fillStyle="#fff";g.textAlign="center";
+  g.font="bold 28px monospace";g.fillText("GAME OVER",180,290);g.font="14px monospace";g.fillText("TAP TO RETRY",180,320);
+ }
+ requestAnimationFrame(draw);
+}
+
 c.addEventListener("pointerdown",e=>{
-e.preventDefault();
-if(!started||over){start();return}
-const r=c.getBoundingClientRect();
-lastTouchX=(e.clientX-r.left)*W/r.width;
-lastTouchY=(e.clientY-r.top)*H/r.height;
-drag=true;
+ e.preventDefault();
+ if(!started||over){start();return}
+ const r=c.getBoundingClientRect();lastX=(e.clientX-r.left)*W/r.width;lastY=(e.clientY-r.top)*H/r.height;drag=true;
 });
-c.addEventListener("pointermove",e=>{if(drag)move(e)});c.addEventListener("pointerup",()=>drag=false);c.addEventListener("pointercancel",()=>drag=false);
-document.getElementById("shot").onpointerdown=e=>{e.preventDefault();if(!started||over)start();else weapon="shot"};
-document.getElementById("laser").onpointerdown=e=>{e.preventDefault();if(!started||over)start();else weapon="laser"};
-document.getElementById("bomb").onpointerdown=e=>{e.preventDefault();if(!started||over)start();else if(bombs){bombs--;p.inv=60;eb.length=0}};
-document.getElementById("od").onpointerdown=e=>{e.preventDefault();if(!started||over)start();else{p.od=600;p.inv=20}};
-setInterval(update,1000/60);draw();
+c.addEventListener("pointermove",e=>{if(drag)move(e)});
+c.addEventListener("pointerup",()=>drag=false);
+c.addEventListener("pointercancel",()=>drag=false);
+
+document.getElementById("weapon").onpointerdown=e=>{e.preventDefault();if(started&&!over){weapon=weapon==="shot"?"laser":"shot";updateButtons()}};
+document.getElementById("bomb").onpointerdown=e=>{e.preventDefault();bomb()};
+document.getElementById("od").onpointerdown=e=>{e.preventDefault();activateOD()};
+
+addEventListener("keydown",e=>{
+ const k=e.key.toLowerCase();
+ if(!started&&!over&&/^[1-5]$/.test(k)){selected=+k-1;return}
+ if(!started&&!over&&(k==="enter"||k===" ")){reset();return}
+ if(over&&(k==="enter"||k===" ")){reset();return}
+ if(started&&!over){
+  if(k==="z"){weapon="shot";updateButtons()}
+  if(k==="x"){weapon="laser";updateButtons()}
+  if(k==="c")bomb();
+  if(k==="v")activateOD();
+ }
+});
+setInterval(update,1000/60);updateButtons();draw();
 </script></body></html>

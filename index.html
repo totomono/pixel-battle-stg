@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>PIXEL BATTLE STG v14</title>
+<style>
+html,body{margin:0;width:100%;height:100%;background:#05070c;overflow:hidden;font-family:system-ui,sans-serif}
+#wrap{height:100%;display:flex;align-items:center;justify-content:center}
+#gamebox{position:relative;width:min(100vw,56.25vh);height:min(177.78vw,100vh)}
+canvas{display:block;width:100%;height:100%;background:#07101b;image-rendering:pixelated;touch-action:none}
+.btn{position:absolute;left:10px;width:62px;height:62px;border-radius:50%;border:2px solid #79b9d9;background:rgba(10,28,45,.92);color:#fff;font:bold 10px monospace;display:flex;align-items:center;justify-content:center;text-align:center;box-sizing:border-box;user-select:none;-webkit-user-select:none;touch-action:none}
+#weapon{bottom:158px}
+#bomb{bottom:88px}
+#od{bottom:18px}
+</style>
+</head>
+<body>
+<div id="wrap"><div id="gamebox">
+<canvas id="game" width="360" height="640"></canvas>
+<div id="weapon" class="btn">SHOT</div>
+<div id="bomb" class="btn">BOMB</div>
+<div id="od" class="btn">OVER<br>DRIVE</div>
+</div></div>
+
+<script>
+"use strict";
+
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+const W=360,H=640;
+ctx.imageSmoothingEnabled=false;
+
+let started=false;
+let gameOver=false;
+let frame=0;
+let score=0;
+let lives=3;
+let bombs=3;
+let weapon="SHOT";
+
+const player={
+  x:180,y:550,
+  inv:0
+};
+
+let dragging=false;
+let lastTouchX=0;
+let lastTouchY=0;
+
+const shots=[];
+const enemies=[];
+const bullets=[];
+
+function resetGame(){
+  started=true;
+  gameOver=false;
+  frame=0;
+  score=0;
+  lives=3;
+  bombs=3;
+  weapon="SHOT";
+  player.x=180;
+  player.y=550;
+  player.inv=45;
+  shots.length=0;
+  enemies.length=0;
+  bullets.length=0;
+}
+
+function startGame(){
+  if(!started || gameOver) resetGame();
+}
+
+function canvasPoint(e){
+  const r=canvas.getBoundingClientRect();
+  return {
+    x:(e.clientX-r.left)*W/r.width,
+    y:(e.clientY-r.top)*H/r.height
+  };
+}
+
+/* 相対移動。最初に触った位置へワープしない */
+canvas.addEventListener("pointerdown",function(e){
+  e.preventDefault();
+
+  if(!started || gameOver){
+    startGame();
+    return;
+  }
+
+  dragging=true;
+  const q=canvasPoint(e);
+  lastTouchX=q.x;
+  lastTouchY=q.y;
+});
+
+canvas.addEventListener("pointermove",function(e){
+  if(!dragging || !started || gameOver)return;
+  e.preventDefault();
+
+  const q=canvasPoint(e);
+  player.x += q.x-lastTouchX;
+  player.y += q.y-lastTouchY;
+  lastTouchX=q.x;
+  lastTouchY=q.y;
+
+  player.x=Math.max(20,Math.min(W-20,player.x));
+  player.y=Math.max(35,Math.min(H-35,player.y));
+});
+
+canvas.addEventListener("pointerup",function(e){
+  e.preventDefault();
+  dragging=false;
+});
+canvas.addEventListener("pointercancel",function(){
+  dragging=false;
+});
+canvas.addEventListener("pointerleave",function(){
+  dragging=false;
+});
+
+/* 左側ボタン */
+const weaponBtn=document.getElementById("weapon");
+const bombBtn=document.getElementById("bomb");
+const odBtn=document.getElementById("od");
+
+weaponBtn.addEventListener("pointerdown",function(e){
+  e.preventDefault();
+  e.stopPropagation();
+  if(!started || gameOver){startGame();return;}
+  weapon=weapon==="SHOT" ? "LASER" : "SHOT";
+});
+
+bombBtn.addEventListener("pointerdown",function(e){
+  e.preventDefault();
+  e.stopPropagation();
+  if(!started || gameOver){startGame();return;}
+  if(bombs>0){
+    bombs--;
+    player.inv=60;
+    bullets.length=0;
+  }
+});
+
+odBtn.addEventListener("pointerdown",function(e){
+  e.preventDefault();
+  e.stopPropagation();
+  if(!started || gameOver){startGame();return;}
+  player.inv=30;
+});
+
+function firePlayer(){
+  if(weapon==="SHOT"){
+    shots.push({x:player.x-6,y:player.y-20,vx:0,vy:-8,laser:false});
+    shots.push({x:player.x+6,y:player.y-20,vx:0,vy:-8,laser:false});
+  }else{
+    shots.push({x:player.x,y:player.y-25,vx:0,vy:-11,laser:true});
+  }
+}
+
+function spawnEnemy(){
+  enemies.push({
+    x:20+Math.random()*320,
+    y:-15,
+    hp:2,
+    vy:1.0
+  });
+}
+
+function enemyFire(e){
+  const dx=player.x-e.x;
+  const dy=player.y-e.y;
+  const len=Math.hypot(dx,dy)||1;
+  bullets.push({
+    x:e.x,y:e.y,
+    vx:dx/len*2,
+    vy:dy/len*2
+  });
+}
+
+function update(){
+  if(!started || gameOver)return;
+
+  frame++;
+
+  if(player.inv>0)player.inv--;
+
+  if(frame%8===0)firePlayer();
+  if(frame%75===0)spawnEnemy();
+
+  for(const e of enemies){
+    e.y+=e.vy;
+    if(frame%70===0)enemyFire(e);
+  }
+
+  for(const s of shots){
+    s.x+=s.vx;
+    s.y+=s.vy;
+  }
+
+  for(const b of bullets){
+    b.x+=b.vx;
+    b.y+=b.vy;
+  }
+
+  /* 自機弾と敵 */
+  for(const s of shots){
+    for(const e of enemies){
+      if(e.hp<=0)continue;
+      if(Math.hypot(s.x-e.x,s.y-e.y)<14){
+        e.hp--;
+        s.y=-100;
+        if(e.hp<=0)score+=100;
+      }
+    }
+  }
+
+  /* 敵弾と自機 */
+  for(const b of bullets){
+    if(Math.hypot(b.x-player.x,b.y-player.y)<8 &&
+       player.inv<=0){
+      lives--;
+      player.inv=90;
+      if(lives<=0)gameOver=true;
+    }
+  }
+
+  for(let i=enemies.length-1;i>=0;i--){
+    if(enemies[i].hp<=0 || enemies[i].y>670)enemies.splice(i,1);
+  }
+
+  for(let i=shots.length-1;i>=0;i--){
+    if(shots[i].y<-30)shots.splice(i,1);
+  }
+
+  for(let i=bullets.length-1;i>=0;i--){
+    const b=bullets[i];
+    if(b.x<-30||b.x>390||b.y<-30||b.y>670)bullets.splice(i,1);
+  }
+}
+
+function drawPlayer(){
+  const X=Math.round(player.x);
+  const Y=Math.round(player.y);
+
+  /* 大きく、高コントラストで描画 */
+  ctx.fillStyle="#ffffff";
+  ctx.fillRect(X-2,Y-24,4,6);
+  ctx.fillRect(X-15,Y-8,30,7);
+
+  ctx.fillStyle="#18ddff";
+  ctx.fillRect(X-8,Y-17,16,23);
+  ctx.fillRect(X-18,Y-4,36,7);
+
+  ctx.fillStyle="#cfffff";
+  ctx.fillRect(X-3,Y-20,6,10);
+
+  ctx.fillStyle="#1768b5";
+  ctx.fillRect(X-3,Y-12,6,6);
+
+  ctx.fillStyle="#63adff";
+  ctx.fillRect(X-16,Y-2,7,4);
+  ctx.fillRect(X+9,Y-2,7,4);
+
+  ctx.fillStyle="#fff36b";
+  ctx.fillRect(X-7,Y+5,5,9);
+  ctx.fillRect(X+2,Y+5,5,9);
+
+  ctx.strokeStyle="#ffffff";
+  ctx.lineWidth=2;
+  ctx.strokeRect(X-19,Y-24,38,39);
+}
+
+function draw(){
+  ctx.fillStyle="#07101b";
+  ctx.fillRect(0,0,W,H);
+
+  /* 背景 */
+  ctx.fillStyle="#10243a";
+  for(let y=0;y<H;y+=32)ctx.fillRect(0,y,W,1);
+
+  /* HUD */
+  ctx.fillStyle="#ffffff";
+  ctx.font="bold 12px monospace";
+  ctx.textAlign="left";
+  ctx.fillText("PIXEL BATTLE STG",8,18);
+  ctx.fillText("SCORE "+score,8,36);
+  ctx.fillText("LIFE "+lives+"  BOMB "+bombs,8,54);
+
+  /* 敵弾 */
+  for(const b of bullets){
+    ctx.fillStyle="#ff5264";
+    ctx.fillRect(Math.round(b.x)-4,Math.round(b.y)-4,8,8);
+  }
+
+  /* 自機弾 */
+  for(const s of shots){
+    ctx.fillStyle=s.laser ? "#ffffff" : "#7ff7ff";
+    if(s.laser){
+      ctx.fillRect(Math.round(s.x)-3,0,6,Math.max(1,Math.round(player.y)));
+    }else{
+      ctx.fillRect(Math.round(s.x)-2,Math.round(s.y)-7,4,10);
+    }
+  }
+
+  /* 敵 */
+  for(const e of enemies){
+    ctx.fillStyle="#ff5b6c";
+    ctx.fillRect(Math.round(e.x)-8,Math.round(e.y)-5,16,10);
+    ctx.fillRect(Math.round(e.x)-4,Math.round(e.y)-9,8,18);
+  }
+
+  if(!started){
+    ctx.fillStyle="rgba(0,0,0,.86)";
+    ctx.fillRect(0,0,W,H);
+
+    ctx.fillStyle="#ffffff";
+    ctx.textAlign="center";
+    ctx.font="bold 25px monospace";
+    ctx.fillText("PIXEL BATTLE STG",180,230);
+
+    ctx.fillStyle="#7ff7ff";
+    ctx.font="bold 18px monospace";
+    ctx.fillText("TAP TO START",180,310);
+
+    ctx.fillStyle="#ffffff";
+    ctx.font="11px monospace";
+    ctx.fillText("画面をタップして開始",180,335);
+  }else{
+    if(player.inv===0 || player.inv%6<3)drawPlayer();
+
+    ctx.fillStyle="#ffffff";
+    ctx.textAlign="right";
+    ctx.font="bold 11px monospace";
+    ctx.fillText(weapon,350,18);
+
+    if(gameOver){
+      ctx.fillStyle="rgba(0,0,0,.78)";
+      ctx.fillRect(0,0,W,H);
+      ctx.fillStyle="#ffffff";
+      ctx.textAlign="center";
+      ctx.font="bold 28px monospace";
+      ctx.fillText("GAME OVER",180,290);
+      ctx.font="14px monospace";
+      ctx.fillText("TAP TO RETRY",180,320);
+    }
+  }
+
+  requestAnimationFrame(draw);
+}
+
+setInterval(update,1000/60);
+draw();
+</script>
+</body>
+</html>
